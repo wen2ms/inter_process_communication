@@ -1,10 +1,9 @@
 #include <errno.h>
 #include <stdio.h>
+#include <string.h>
 #include <sys/sem.h>
+#include <sys/shm.h>
 #include <unistd.h>
-
-// ipcs -s
-// ipcrm -s <shmid>
 
 union semun {
     int val;
@@ -22,7 +21,21 @@ int wait(struct Semaphore* sem);
 int post(struct Semaphore* sem);
 int destroy(struct Semaphore* sem);
 
-int main() {
+int main(int argc, char* argv[]) {
+    if (argc < 2) {
+        printf("Usage: %s <string>\n", argv[0]);
+        return -1;
+    }
+
+    int shmid = shmget((key_t)0x5005, 1024, 0640 | IPC_CREAT);
+
+    if (shmid == -1) {
+        perror("shmget");
+        return -1;
+    }
+
+    char* ptext = (char*)shmat(shmid, NULL, 0);
+
     struct Semaphore sem;
 
     int ret = init(&sem, 0x5005);
@@ -39,7 +52,13 @@ int main() {
     }
     printf("wait successully...\n");
 
-    sleep(50);
+    printf("Before writing: %s\n", ptext);
+
+    strcpy(ptext, argv[1]);
+
+    sleep(10);
+
+    printf("After writing: %s\n", ptext);
 
     ret = post(&sem);
     if (ret == -1) {
@@ -48,12 +67,7 @@ int main() {
     }
     printf("post successully...\n");
 
-    ret = destroy(&sem);
-    if (ret == -1) {
-        printf("destroy failed...\n");
-        return -1;
-    }
-    printf("destroy successully...\n");
+    shmdt(ptext);
 
     return 0;
 }

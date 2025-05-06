@@ -3,7 +3,7 @@
 #include <unistd.h>
 
 // ipcs -m
-// ipcrm sem <semid>
+// ipcrm -m <shmid>
 
 int main() {
     int shmid = shmget((key_t)0x5005, 1024, 0640 | IPC_CREAT);
