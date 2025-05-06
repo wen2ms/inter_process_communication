@@ -3,6 +3,9 @@
 #include <sys/sem.h>
 #include <unistd.h>
 
+// ipcs -s
+// ipcrm -m <shmid>
+
 union semun {
     int val;
     struct semid_ds* buf;
@@ -56,20 +59,19 @@ int main() {
 }
 
 int init(struct Semaphore* sem, key_t key) {
-    int* sem_id = &sem->sem_id;
-    *sem_id = semget(key, 1, 0640);
-    if (*sem_id == -1) {
+    int sem_id = semget(key, 1, 0640);
+    if (sem_id == -1) {
         if (errno == ENOENT) {
-            *sem_id = semget(key, 1, 0640|IPC_CREAT);
-            if (*sem_id == -1) {
+            sem_id = semget(key, 1, 0640|IPC_CREAT);
+            if (sem_id == -1) {
                 perror("semget create");
                 return -1;
             }
             union semun sem_union;
             sem_union.val = 1;
-            int ret = semctl(*sem_id, 0, SETVAL, sem_union);
+            int ret = semctl(sem_id, 0, SETVAL, sem_union);
             if (ret < 0) {
-                perror("semctl");
+                perror("semctl setval");
                 return -1;
             }
         } else {
@@ -77,10 +79,41 @@ int init(struct Semaphore* sem, key_t key) {
             return -1;
         }
     }
-    
+    sem->sem_id = sem_id;
     return 0;
 }
 
-int wait(struct Semaphore* sem) {}
-int post(struct Semaphore* sem) {}
-int destroy(struct Semaphore* sem) {}
+int wait(struct Semaphore* sem) {
+    struct sembuf sem_b;
+    sem_b.sem_num = 0;
+    sem_b.sem_op = -1;
+    sem_b.sem_flg = SEM_UNDO;
+    int ret = semop(sem->sem_id, &sem_b, 1);
+    if (ret == -1) {
+        perror("semop wait");
+        return -1;
+    }
+    return 0;
+}
+
+int post(struct Semaphore* sem) {
+    struct sembuf sem_b;
+    sem_b.sem_num = 0;
+    sem_b.sem_op = 1;
+    sem_b.sem_flg = SEM_UNDO;
+    int ret = semop(sem->sem_id, &sem_b, 1);
+    if (ret == -1) {
+        perror("semop post");
+        return -1;
+    }
+    return 0;
+}
+
+int destroy(struct Semaphore* sem) {
+    int ret = semctl(sem->sem_id, 0, IPC_RMID);
+    if (ret == -1) {
+        perror("semctl rm");
+        return -1;
+    }
+    return 0;
+}
